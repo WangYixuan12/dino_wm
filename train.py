@@ -217,14 +217,18 @@ class Trainer:
             for param in self.encoder.parameters():
                 param.requires_grad = False
 
-        self.proprio_encoder = hydra.utils.instantiate(
-            self.cfg.proprio_encoder,
-            in_chans=self.datasets["train"].proprio_dim,
-            emb_dim=self.cfg.proprio_emb_dim,
-        )
-        proprio_emb_dim = self.proprio_encoder.emb_dim
-        print(f"Proprio encoder type: {type(self.proprio_encoder)}")
-        self.proprio_encoder = self.accelerator.prepare(self.proprio_encoder)
+        if "proprio_encoder" in self.cfg:
+            self.proprio_encoder = hydra.utils.instantiate(
+                self.cfg.proprio_encoder,
+                in_chans=self.datasets["train"].proprio_dim,
+                emb_dim=self.cfg.proprio_emb_dim,
+            )
+            proprio_emb_dim = self.proprio_encoder.emb_dim
+            print(f"Proprio encoder type: {type(self.proprio_encoder)}")
+            self.proprio_encoder = self.accelerator.prepare(self.proprio_encoder)
+        else:
+            proprio_emb_dim = 0
+            self.proprio_encoder = None
 
         self.action_encoder = hydra.utils.instantiate(
             self.cfg.action_encoder,
@@ -238,7 +242,8 @@ class Trainer:
 
         if self.accelerator.is_main_process:
             self.wandb_run.watch(self.action_encoder)
-            self.wandb_run.watch(self.proprio_encoder)
+            if self.proprio_encoder is not None:
+                self.wandb_run.watch(self.proprio_encoder)
 
         # initialize predictor
         if self.encoder.latent_ndim == 1:  # if feature is 1D
@@ -253,16 +258,15 @@ class Trainer:
 
         if self.cfg.has_predictor:
             if self.predictor is None:
+                pred_dim = self.encoder.emb_dim
+                pred_dim += action_emb_dim * self.cfg.num_action_repeat * self.cfg.concat_dim
+                if self.proprio_encoder is not None:
+                    pred_dim += proprio_emb_dim * self.cfg.num_proprio_repeat * self.cfg.concat_dim
                 self.predictor = hydra.utils.instantiate(
                     self.cfg.predictor,
                     num_patches=num_patches,
                     num_frames=self.cfg.num_hist,
-                    dim=self.encoder.emb_dim
-                    + (
-                        proprio_emb_dim * self.cfg.num_proprio_repeat
-                        + action_emb_dim * self.cfg.num_action_repeat
-                    )
-                    * (self.cfg.concat_dim),
+                    dim=pred_dim,
                 )
             if not self.train_predictor:
                 for param in self.predictor.parameters():
@@ -321,12 +325,18 @@ class Trainer:
                 self.predictor_optimizer
             )
 
-            self.action_encoder_optimizer = torch.optim.AdamW(
-                itertools.chain(
-                    self.action_encoder.parameters(), self.proprio_encoder.parameters()
-                ),
-                lr=self.cfg.training.action_encoder_lr,
-            )
+            if self.proprio_encoder is not None:
+                self.action_encoder_optimizer = torch.optim.AdamW(
+                    itertools.chain(
+                        self.action_encoder.parameters(), self.proprio_encoder.parameters()
+                    ),
+                    lr=self.cfg.training.action_encoder_lr,
+                )
+            else:
+                self.action_encoder_optimizer = torch.optim.AdamW(
+                    self.action_encoder.parameters(),
+                    lr=self.cfg.training.action_encoder_lr,
+                )
             self.action_encoder_optimizer = self.accelerator.prepare(
                 self.action_encoder_optimizer
             )
@@ -443,7 +453,7 @@ class Trainer:
         for i, data in enumerate(
             tqdm(self.dataloaders["train"], desc=f"Epoch {self.epoch} Train")
         ):
-            obs, act, state = data
+            obs, act, _ = data
             plot = i == 0  # only plot from the first batch
             self.model.train()
             z_out, visual_out, visual_reconstructed, loss, loss_components = self.model(
@@ -480,7 +490,7 @@ class Trainer:
                     z_gt = self.model.encode_obs(obs)
                     z_tgt = slice_trajdict_with_t(z_gt, start_idx=self.model.num_pred)
 
-                    state_tgt = state[:, -self.model.num_hist :]  # (b, num_hist, dim)
+                    # state_tgt = state[:, -self.model.num_hist :]  # (b, num_hist, dim)
                     err_logs = self.err_eval(z_obs_out, z_tgt)
 
                     err_logs = self.accelerator.gather_for_metrics(err_logs)

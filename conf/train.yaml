@@ -3,10 +3,10 @@ defaults:
   - env: point_maze
   - encoder: dino 
   - action_encoder: proprio
-  - proprio_encoder: proprio
+  # - proprio_encoder: proprio
   - decoder: vqvae
   - predictor: vit
-  - override hydra/launcher: submitit_slurm
+  # - override hydra/launcher: submitit_slurm
 
 # base path to save model outputs. Checkpoints will be saved to ${ckpt_base_path}/outputs.
 ckpt_base_path: ./ # put absolute path here
@@ -17,22 +17,22 @@ hydra:
   sweep:
     dir: ${ckpt_base_path}/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
     subdir: ${hydra.job.num}
-  launcher:
-    submitit_folder: ${hydra.sweep.dir}/.submitit/%j
-    nodes: 1
-    tasks_per_node: 1
-    cpus_per_task: 8
-    mem_gb: 512
-    gres: "gpu:h100:1"
-    timeout_min: 2880
-    setup: ["export DEBUGVAR=$(scontrol show hostnames $SLURM_JOB_NODELIST)",
-            export MASTER_ADDR="$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)",
-            "export MASTER_PORT=$(for port in $(shuf -i 30000-65500 -n 20); do if [[ $(netstat -tupln 2>&1 | grep $port | wc -l) -eq 0 ]] ; then echo $port; break; fi; done;)",]
+  # launcher:
+  #   submitit_folder: ${hydra.sweep.dir}/.submitit/%j
+  #   nodes: 1
+  #   tasks_per_node: 1
+  #   cpus_per_task: 8
+  #   mem_gb: 512
+  #   gres: "gpu:h100:1"
+  #   timeout_min: 2880
+  #   setup: ["export DEBUGVAR=$(scontrol show hostnames $SLURM_JOB_NODELIST)",
+  #           export MASTER_ADDR="$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n 1)",
+  #           "export MASTER_PORT=$(for port in $(shuf -i 30000-65500 -n 20); do if [[ $(netstat -tupln 2>&1 | grep $port | wc -l) -eq 0 ]] ; then echo $port; break; fi; done;)",]
 
 training:
   seed: 0
   epochs: 100
-  batch_size: 32 # should >= nodes * tasks_per_node
+  batch_size: 8 # should >= nodes * tasks_per_node
   save_every_x_epoch: 1
   reconstruct_every_x_batch: 500
   num_reconstruct_samples: 6

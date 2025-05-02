@@ -73,7 +73,8 @@ class VWorldModel(nn.Module):
             self.encoder.train(mode)
         if self.predictor is not None and self.train_predictor:
             self.predictor.train(mode)
-        self.proprio_encoder.train(mode)
+        if self.proprio_encoder is not None:
+            self.proprio_encoder.train(mode)
         self.action_encoder.train(mode)
         if self.decoder is not None and self.train_decoder:
             self.decoder.train(mode)
@@ -83,7 +84,8 @@ class VWorldModel(nn.Module):
         self.encoder.eval()
         if self.predictor is not None:
             self.predictor.eval()
-        self.proprio_encoder.eval()
+        if self.proprio_encoder is not None:
+            self.proprio_encoder.eval()
         self.action_encoder.eval()
         if self.decoder is not None:
             self.decoder.eval()
@@ -100,13 +102,20 @@ class VWorldModel(nn.Module):
                     [z_dct['visual'], z_dct['proprio'].unsqueeze(2), act_emb.unsqueeze(2)], dim=2 # add as an extra token
                 )  # (b, num_frames, num_patches + 2, dim)
         if self.concat_dim == 1:
-            proprio_tiled = repeat(z_dct['proprio'].unsqueeze(2), "b t 1 a -> b t f a", f=z_dct['visual'].shape[2])
-            proprio_repeated = proprio_tiled.repeat(1, 1, 1, self.num_proprio_repeat)
-            act_tiled = repeat(act_emb.unsqueeze(2), "b t 1 a -> b t f a", f=z_dct['visual'].shape[2])
-            act_repeated = act_tiled.repeat(1, 1, 1, self.num_action_repeat)
-            z = torch.cat(
-                [z_dct['visual'], proprio_repeated, act_repeated], dim=3
-            )  # (b, num_frames, num_patches, dim + action_dim)
+            if self.proprio_encoder is not None:
+                proprio_tiled = repeat(z_dct['proprio'].unsqueeze(2), "b t 1 a -> b t f a", f=z_dct['visual'].shape[2])
+                proprio_repeated = proprio_tiled.repeat(1, 1, 1, self.num_proprio_repeat)
+                act_tiled = repeat(act_emb.unsqueeze(2), "b t 1 a -> b t f a", f=z_dct['visual'].shape[2])
+                act_repeated = act_tiled.repeat(1, 1, 1, self.num_action_repeat)
+                z = torch.cat(
+                    [z_dct['visual'], proprio_repeated, act_repeated], dim=3
+                )  # (b, num_frames, num_patches, dim + action_dim)
+            else:
+                act_tiled = repeat(act_emb.unsqueeze(2), "b t 1 a -> b t f a", f=z_dct['visual'].shape[2])
+                act_repeated = act_tiled.repeat(1, 1, 1, self.num_action_repeat)
+                z = torch.cat(
+                    [z_dct['visual'], act_repeated], dim=3
+                )
         return z
     
     def encode_act(self, act):
@@ -129,9 +138,12 @@ class VWorldModel(nn.Module):
         visual_embs = self.encoder.forward(visual)
         visual_embs = rearrange(visual_embs, "(b t) p d -> b t p d", b=b)
 
-        proprio = obs['proprio']
-        proprio_emb = self.encode_proprio(proprio)
-        return {"visual": visual_embs, "proprio": proprio_emb}
+        if self.proprio_encoder is not None:
+            proprio = obs['proprio']
+            proprio_emb = self.encode_proprio(proprio)
+            return {"visual": visual_embs, "proprio": proprio_emb}
+        else:
+            return {"visual": visual_embs}
 
     def predict(self, z):  # in embedding space
         """
@@ -163,10 +175,15 @@ class VWorldModel(nn.Module):
         b, num_frames, num_patches, emb_dim = z_obs["visual"].shape
         visual, diff = self.decoder(z_obs["visual"])  # (b*num_frames, 3, 224, 224)
         visual = rearrange(visual, "(b t) c h w -> b t c h w", t=num_frames)
-        obs = {
-            "visual": visual,
-            "proprio": z_obs["proprio"], # Note: no decoder for proprio for now!
-        }
+        if self.proprio_encoder is not None:
+            obs = {
+                "visual": visual,
+                "proprio": z_obs["proprio"], # Note: no decoder for proprio for now!
+            }
+        else:
+            obs = {
+                "visual": visual,
+            }
         return obs, diff
     
     def separate_emb(self, z):
@@ -183,7 +200,10 @@ class VWorldModel(nn.Module):
             # remove tiled dimensions
             z_proprio = z_proprio[:, :, 0, : self.proprio_dim // self.num_proprio_repeat]
             z_act = z_act[:, :, 0, : self.action_dim // self.num_action_repeat]
-        z_obs = {"visual": z_visual, "proprio": z_proprio}
+        if self.proprio_encoder is not None:
+            z_obs = {"visual": z_visual, "proprio": z_proprio}
+        else:
+            z_obs = {"visual": z_visual}
         return z_obs, z_act
 
     def forward(self, obs, act):

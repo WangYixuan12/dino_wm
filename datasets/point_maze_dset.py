@@ -93,7 +93,7 @@ class PointMazeDataset(TrajDataset):
             image = self.transform(image)
         obs = {
             "visual": image,
-            "proprio": proprio
+            # "proprio": proprio
         }
         return obs, act, state, {} # env_info
 
