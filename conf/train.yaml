@@ -41,7 +41,7 @@ training:
   predictor_lr: 5e-4
   action_encoder_lr: 5e-4
 
-img_size: 224 # should be a multiple of 224
+img_size: 128 # should be a multiple of 16
 frameskip: 5
 concat_dim: 1
 

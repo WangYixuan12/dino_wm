@@ -111,7 +111,7 @@ class Trainer:
                 f.write(OmegaConf.to_yaml(cfg, resolve=True))
 
         seed(cfg.training.seed)
-        log.info(f"Loading dataset from {self.cfg.env.dataset.data_path} ...")
+        log.info(f"Loading dataset")
         self.datasets, traj_dsets = hydra.utils.call(
             self.cfg.env.dataset,
             num_hist=self.cfg.num_hist,
