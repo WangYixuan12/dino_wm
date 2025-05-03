@@ -180,10 +180,15 @@ class Trainer:
                 os.makedirs("checkpoints")
             ckpt = {}
             for k in self._keys_to_save:
+                if self.__dict__[k] is None:
+                    continue
                 if hasattr(self.__dict__[k], "module"):
                     ckpt[k] = self.accelerator.unwrap_model(self.__dict__[k])
+                if isinstance(self.__dict__[k], torch.optim.Optimizer):
+                    ckpt[k] = self.__dict__[k].state_dict()
                 else:
                     ckpt[k] = self.__dict__[k]
+            Path("checkpoints").mkdir(parents=True, exist_ok=True)
             torch.save(ckpt, "checkpoints/model_latest.pth")
             torch.save(ckpt, f"checkpoints/model_{self.epoch}.pth")
             log.info("Saved model to {}".format(os.getcwd()))
@@ -565,7 +570,7 @@ class Trainer:
         for i, data in enumerate(
             tqdm(self.dataloaders["valid"], desc=f"Epoch {self.epoch} Valid")
         ):
-            obs, act, state = data
+            obs, act, _ = data
             plot = i == 0
             self.model.eval()
             z_out, visual_out, visual_reconstructed, loss, loss_components = self.model(
@@ -586,7 +591,6 @@ class Trainer:
                     z_gt = self.model.encode_obs(obs)
                     z_tgt = slice_trajdict_with_t(z_gt, start_idx=self.model.num_pred)
 
-                    state_tgt = state[:, -self.model.num_hist :]  # (b, num_hist, dim)
                     err_logs = self.err_eval(z_obs_out, z_tgt)
 
                     err_logs = self.accelerator.gather_for_metrics(err_logs)
@@ -640,7 +644,7 @@ class Trainer:
             self.logs_update(loss_components)
 
     def openloop_rollout(
-        self, dset, num_rollout=10, rand_start_end=True, min_horizon=2, mode="train"
+        self, dset, num_rollout=10, rand_start_end=False, min_horizon=2, mode="train"
     ):
         np.random.seed(self.cfg.training.seed)
         min_horizon = min_horizon + self.cfg.num_hist
@@ -658,33 +662,32 @@ class Trainer:
             valid_traj = False
             while not valid_traj:
                 traj_idx = np.random.randint(0, len(dset))
-                obs, act, state, _ = dset[traj_idx]
+                obs, act, _ = dset[traj_idx]
                 act = act.to(self.device)
                 if rand_start_end:
-                    if obs["visual"].shape[0] > min_horizon * self.cfg.frameskip + 1:
+                    if obs["visual"].shape[0] > min_horizon + 1:
                         start = np.random.randint(
                             0,
-                            obs["visual"].shape[0] - min_horizon * self.cfg.frameskip - 1,
+                            obs["visual"].shape[0] - min_horizon - 1,
                         )
                     else:
                         start = 0
-                    max_horizon = (obs["visual"].shape[0] - start - 1) // self.cfg.frameskip
+                    max_horizon = (obs["visual"].shape[0] - start - 1)
                     if max_horizon > min_horizon:
                         valid_traj = True
                         horizon = np.random.randint(min_horizon, max_horizon + 1)
                 else:
                     valid_traj = True
                     start = 0
-                    horizon = (obs["visual"].shape[0] - 1) // self.cfg.frameskip
+                    horizon = (obs["visual"].shape[0] - 1)
 
             for k in obs.keys():
                 obs[k] = obs[k][
                     start : 
-                    start + horizon * self.cfg.frameskip + 1 : 
-                    self.cfg.frameskip
+                    start + horizon + 1
                 ]
-            act = act[start : start + horizon * self.cfg.frameskip]
-            act = rearrange(act, "(h f) d -> h (f d)", f=self.cfg.frameskip)
+            act = act[start : start + horizon]
+            # act = rearrange(act, "(h f) d -> h (f d)", f=self.cfg.frameskip)
 
             obs_g = {}
             for k in obs.keys():

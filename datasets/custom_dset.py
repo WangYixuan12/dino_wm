@@ -291,6 +291,7 @@ def load_custom_slice_train_val(
     frameskip: int = 1,
     num_pred: int = 0,
     num_hist: int = 0,
+    val_horizon: int = 0,
 ):
     dset = CustomDataset(
         dataset_dir=dataset_dir,
@@ -313,7 +314,26 @@ def load_custom_slice_train_val(
     datasets = {}
     datasets['train'] = dset_train
     datasets['valid'] = dset_val
+    
+    traj_dset = CustomDataset(
+        dataset_dir=dataset_dir,
+        horizon=val_horizon,
+        val_horizon=val_horizon,
+        skip_frame=frameskip,
+        pad_before=pad_before,
+        pad_after=pad_after,
+        seed=seed,
+        val_ratio=val_ratio,
+        skip_idx=skip_idx,
+        use_cache=use_cache,
+        delta_action=delta_action,
+        action_mode=action_mode,
+        shape_meta=shape_meta
+    )
+    traj_dset_train = traj_dset
+    traj_dset_val = traj_dset.get_validation_dataset()
     traj_dset = {}
-    traj_dset['train'] = dset_train
-    traj_dset['valid'] = dset_val
+    
+    traj_dset['train'] = traj_dset_train
+    traj_dset['valid'] = traj_dset_val
     return datasets, traj_dset
