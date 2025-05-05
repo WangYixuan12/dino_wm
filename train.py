@@ -190,9 +190,9 @@ class Trainer:
                     ckpt[k] = self.__dict__[k]
             Path("checkpoints").mkdir(parents=True, exist_ok=True)
             torch.save(ckpt, "checkpoints/model_latest.pth")
-            torch.save(ckpt, f"checkpoints/model_{self.epoch}.pth")
+            # torch.save(ckpt, f"checkpoints/model_{self.epoch}.pth")
             log.info("Saved model to {}".format(os.getcwd()))
-            ckpt_path = os.path.join(os.getcwd(), f"checkpoints/model_{self.epoch}.pth")
+            ckpt_path = os.path.join(os.getcwd(), f"checkpoints/model_latest.pth")
         else:
             ckpt_path = None
         model_name = self.cfg["saved_folder"].split("outputs/")[-1]
@@ -662,32 +662,41 @@ class Trainer:
             valid_traj = False
             while not valid_traj:
                 traj_idx = np.random.randint(0, len(dset))
-                obs, act, _ = dset[traj_idx]
-                act = act.to(self.device)
-                if rand_start_end:
-                    if obs["visual"].shape[0] > min_horizon + 1:
-                        start = np.random.randint(
-                            0,
-                            obs["visual"].shape[0] - min_horizon - 1,
-                        )
-                    else:
-                        start = 0
-                    max_horizon = (obs["visual"].shape[0] - start - 1)
-                    if max_horizon > min_horizon:
-                        valid_traj = True
-                        horizon = np.random.randint(min_horizon, max_horizon + 1)
+                datapack = dset[traj_idx]
+                if len(datapack) == 3:
+                    obs, act, _ = datapack
                 else:
-                    valid_traj = True
-                    start = 0
-                    horizon = (obs["visual"].shape[0] - 1)
+                    obs, act, _, _ = datapack
+                act = act.to(self.device)
+                is_stacked_already = (self.model.action_dim == act.shape[-1])  # HACK: data might be stacked already
+                # if rand_start_end:
+                #     if obs["visual"].shape[0] > min_horizon + 1:
+                #         start = np.random.randint(
+                #             0,
+                #             obs["visual"].shape[0] - min_horizon - 1,
+                #         )
+                #     else:
+                #         start = 0
+                #     max_horizon = (obs["visual"].shape[0] - start - 1)
+                #     if max_horizon > min_horizon:
+                #         valid_traj = True
+                #         horizon = np.random.randint(min_horizon, max_horizon + 1)
+                # else:
+                valid_traj = True
+                start = 0
+                horizon = (obs["visual"].shape[0] - 1)
+                if not is_stacked_already:
+                    horizon = horizon // self.cfg.frameskip
 
-            for k in obs.keys():
-                obs[k] = obs[k][
-                    start : 
-                    start + horizon + 1
-                ]
-            act = act[start : start + horizon]
-            # act = rearrange(act, "(h f) d -> h (f d)", f=self.cfg.frameskip)
+            if is_stacked_already:
+                for k in obs.keys():
+                    obs[k] = obs[k][start : start + horizon + 1]
+                act = act[start : start + horizon]
+            else:
+                for k in obs.keys():
+                    obs[k] = obs[k][start : start + horizon * self.cfg.frameskip + 1 : self.cfg.frameskip]
+                act = act[start : start + horizon * self.cfg.frameskip]
+                act = rearrange(act, "(h f) d -> h (f d)", f=self.cfg.frameskip)
 
             obs_g = {}
             for k in obs.keys():
@@ -726,6 +735,14 @@ class Trainer:
                         imgs,
                         obs["visual"].shape[0],
                         f"{plotting_dir}/e{self.epoch}_{mode}_{idx}{postfix}.png",
+                    )
+                    pred_img_np = visuals[0].detach().cpu().numpy() # (t, 3, h, w)
+                    gt_img_np = obs["visual"].detach().cpu().numpy()
+                    concat_img = np.concatenate((pred_img_np, gt_img_np), axis=-1) # (t, 3, h, w * 3)
+                    concat_img = (concat_img + 1.0) / 2.0
+                    concat_img = (concat_img * 255.0).astype(np.uint8)
+                    self.wandb_run.log(
+                        {f"{mode}_vis/rollout_{idx}": wandb.Video(concat_img, caption=f"rollout_{idx}")}
                     )
         logs = {
             key: sum(values) / len(values) for key, values in logs.items() if values
@@ -814,6 +831,23 @@ class Trainer:
             num_columns=num_samples * num_frames,
             img_name=f"{phase}/{phase}_e{str(epoch).zfill(5)}_b{batch}.png",
         )
+        pred_imgs = rearrange(pred_imgs, "(b t) c h w -> b t c h w", t=num_frames)
+        gt_imgs = rearrange(gt_imgs, "(b t) c h w -> b t c h w", t=num_frames)
+        reconstructed_gt_imgs = rearrange(
+            reconstructed_gt_imgs, "(b t) c h w -> b t c h w", t=num_frames
+        )
+        for i in range(pred_imgs.shape[0]):
+            pred_img_np = pred_imgs[i].detach().cpu().numpy() # (t, 3, h, w)
+            gt_img_np = gt_imgs[i].detach().cpu().numpy()
+            reconstructed_gt_img_np = reconstructed_gt_imgs[i].detach().cpu().numpy()
+            concat_img = np.concatenate(
+                (pred_img_np, gt_img_np, reconstructed_gt_img_np), axis=-1
+            ) # (t, 3, h, w * 3)
+            concat_img = (concat_img + 1.0) / 2.0
+            concat_img = (concat_img * 255.0).astype(np.uint8)
+            self.wandb_run.log(
+                {f"{phase}_vis/sample_{batch}": wandb.Video(concat_img, caption=f"sample_{batch}")}
+            )
 
     def plot_imgs(self, imgs, num_columns, img_name):
         utils.save_image(
