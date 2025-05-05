@@ -668,7 +668,7 @@ class Trainer:
                 else:
                     obs, act, _, _ = datapack
                 act = act.to(self.device)
-                is_stacked_already = (self.model.action_dim == act.shape[-1])  # HACK: data might be stacked already
+                is_stacked_already = (self.action_encoder.in_chans == act.shape[-1])  # HACK: data might be stacked already
                 # if rand_start_end:
                 #     if obs["visual"].shape[0] > min_horizon + 1:
                 #         start = np.random.randint(
