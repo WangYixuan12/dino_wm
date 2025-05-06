@@ -1,53 +1,23 @@
-import concurrent.futures
-import glob
-import multiprocessing
 import os
-import shutil
-from pathlib import Path
 from typing import Dict, Optional, Any
 import copy 
 
-import cv2
 import h5py
 import numpy as np
 import torch
 import zarr
-import zarr.storage
-from filelock import FileLock
-from omegaconf import DictConfig, OmegaConf
-from tqdm import tqdm
-from yixuan_utilities.draw_utils import center_crop
 from yixuan_utilities.kinematics_helper import KinHelper
 import torch
 import decord
 import numpy as np
-from einops import rearrange
 
-from ext_utils.imagecodecs_numcodecs import Jpeg2k, register_codecs
-from ext_utils.normalizer import (
-    LinearNormalizer,
-    SingleFieldLinearNormalizer,
-    array_to_stats,
-    get_identity_normalizer_from_stat,
-    get_image_range_normalizer,
-    get_range_normalizer_from_stat,
-    get_twenty_times_normalizer_from_stat,
-)
-from ext_utils.pytorch_util import dict_apply
+from ext_utils.imagecodecs_numcodecs import register_codecs
 from ext_utils.replay_buffer import ReplayBuffer
 from ext_utils.sampler import SequenceSampler, get_val_mask
-from .traj_dset import TrajDataset, get_train_val_sliced, TrajSlicerDataset
+from .traj_dset import TrajDataset
 
 decord.bridge.set_bridge("torch")
 register_codecs()
-
-def normalizer_from_stat(stat: Dict[str, np.ndarray]) -> LinearNormalizer:
-    max_abs = np.maximum(stat["max"].max(), np.abs(stat["min"]).max())
-    scale = np.full_like(stat["max"], fill_value=1 / max_abs)
-    offset = np.zeros_like(stat["max"])
-    return SingleFieldLinearNormalizer.create_manual(
-        scale=scale, offset=offset, input_stats_dict=stat
-    )
 
 class CustomDataset(TrajDataset):
     def __init__(
@@ -141,50 +111,11 @@ class CustomDataset(TrajDataset):
             self.kin_helper = KinHelper("trossen_vx300s")
 
     def get_seq_length(self, idx):
-        epi_idx = np.searchsorted(self.sampler.episode_ends, idx)
         episode_start = self.sampler.episode_ends[idx - 1] if idx > 0 else 0
         episode_end = self.sampler.episode_ends[idx]
         episode_len = episode_end - episode_start
         return episode_len
-    
-    def get_normalizer(self, mode: str = "none", **kwargs: dict) -> LinearNormalizer:
-        """Return a normalizer for the dataset."""
-        normalizer = LinearNormalizer()
 
-        # action
-        stat = array_to_stats(self.replay_buffer["action"])
-        if self.delta_action:
-            this_normalizer = get_twenty_times_normalizer_from_stat(stat)
-        else:
-            this_normalizer = normalizer_from_stat(stat)
-        normalizer["action"] = this_normalizer
-
-        # obs
-        for key in self.lowdim_keys:
-            stat = array_to_stats(self.replay_buffer[key])
-
-            if key.endswith("pos"):
-                # this_normalizer = get_range_normalizer_from_stat(stat)
-                this_normalizer = get_identity_normalizer_from_stat(stat)
-            elif key.endswith("quat"):
-                # quaternion is in [-1,1] already
-                this_normalizer = get_identity_normalizer_from_stat(stat)
-            elif key.endswith("qpos"):
-                this_normalizer = get_range_normalizer_from_stat(stat)
-            elif key.endswith("vel"):
-                this_normalizer = get_identity_normalizer_from_stat(stat)
-            else:
-                raise RuntimeError("unsupported")
-            normalizer[key] = this_normalizer
-
-        # image
-        for key in self.rgb_keys:
-            normalizer[key] = get_image_range_normalizer()
-
-        for key in self.depth_keys:
-            normalizer[key] = get_image_range_normalizer()
-
-        return normalizer
     def get_validation_dataset(self) -> "CustomDataset":
         """Return a validation dataset."""
         val_set = copy.copy(self)
@@ -212,6 +143,7 @@ class CustomDataset(TrajDataset):
             # convert uint8 image to float32
             obs_dict[key] = np.moveaxis(sample[key], -1, 1).astype(np.float32) / 255.0
             obs_dict[key] = obs_dict[key][skip_start :: self.skip_frame]
+            obs_dict[key] = (obs_dict[key] - 0.5) * 2.0
             # T,C,H,W
             del sample[key]
         for key in self.depth_keys:
