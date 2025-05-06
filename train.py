@@ -740,6 +740,7 @@ class Trainer:
                     gt_img_np = obs["visual"].detach().cpu().numpy()
                     concat_img = np.concatenate((pred_img_np, gt_img_np), axis=-1) # (t, 3, h, w * 3)
                     concat_img = (concat_img + 1.0) / 2.0
+                    concat_img = np.clip(concat_img, 0.0, 1.0)
                     concat_img = (concat_img * 255.0).astype(np.uint8)
                     self.wandb_run.log(
                         {f"{mode}_vis/rollout_{idx}": wandb.Video(concat_img, caption=f"rollout_{idx}")}
@@ -844,6 +845,7 @@ class Trainer:
                 (pred_img_np, gt_img_np, reconstructed_gt_img_np), axis=-1
             ) # (t, 3, h, w * 3)
             concat_img = (concat_img + 1.0) / 2.0
+            concat_img = np.clip(concat_img, 0.0, 1.0)
             concat_img = (concat_img * 255.0).astype(np.uint8)
             self.wandb_run.log(
                 {f"{phase}_vis/sample_{batch}": wandb.Video(concat_img, caption=f"sample_{batch}")}
