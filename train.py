@@ -20,8 +20,8 @@ from hydra.types import RunMode
 from hydra.core.hydra_config import HydraConfig
 from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
-from metrics.image_metrics import eval_images
-from utils import slice_trajdict_with_t, cfg_to_dict, seed, sample_tensors
+from dino_wm.metrics.image_metrics import eval_images
+from dino_wm.utils import slice_trajdict_with_t, cfg_to_dict, seed, sample_tensors
 
 warnings.filterwarnings("ignore")
 log = logging.getLogger(__name__)
@@ -398,7 +398,7 @@ class Trainer:
                     self.cfg.plan_settings.plan_cfg_path is not None
                     and ckpt_path is not None
                 ):  # ckpt_path is only not None for main process
-                    from plan import build_plan_cfg_dicts, launch_plan_jobs
+                    from dino_wm.plan import build_plan_cfg_dicts, launch_plan_jobs
 
                     cfg_dicts = build_plan_cfg_dicts(
                         plan_cfg_path=os.path.join(
