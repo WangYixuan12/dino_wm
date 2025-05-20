@@ -1,1 +1,1 @@
-_target_: models.dummy.DummyRepeatActionEncoder
+_target_: dino_wm.models.dummy.DummyRepeatActionEncoder

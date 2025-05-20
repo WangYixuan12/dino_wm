@@ -61,7 +61,7 @@ has_predictor: True # set this to False for only training a decoder
 has_decoder: True # set this to False for only training a predictor
 
 model:
-  _target_: models.visual_world_model.VWorldModel
+  _target_: dino_wm.models.visual_world_model.VWorldModel
   image_size: ${img_size}
   num_hist: ${num_hist}
   num_pred: ${num_pred}

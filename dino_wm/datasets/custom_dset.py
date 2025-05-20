@@ -11,9 +11,9 @@ import torch
 import decord
 import numpy as np
 
-from ext_utils.imagecodecs_numcodecs import register_codecs
-from ext_utils.replay_buffer import ReplayBuffer
-from ext_utils.sampler import SequenceSampler, get_val_mask
+from dino_wm.ext_utils.imagecodecs_numcodecs import register_codecs
+from dino_wm.ext_utils.replay_buffer import ReplayBuffer
+from dino_wm.ext_utils.sampler import SequenceSampler, get_val_mask
 from .traj_dset import TrajDataset
 
 decord.bridge.set_bridge("torch")

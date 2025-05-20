@@ -1,2 +1,2 @@
-_target_: models.dummy.DummyModel
+_target_: dino_wm.models.dummy.DummyModel
 emb_dim: 7

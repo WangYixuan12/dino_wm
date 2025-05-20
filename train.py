@@ -458,6 +458,8 @@ class Trainer:
         for i, data in enumerate(
             tqdm(self.dataloaders["train"], desc=f"Epoch {self.epoch} Train")
         ):
+            if i > 2:
+                break
             obs, act, _ = data
             plot = i == 0  # only plot from the first batch
             self.model.train()
@@ -861,7 +863,7 @@ class Trainer:
         )
 
 
-@hydra.main(config_path="conf", config_name="train")
+@hydra.main(config_path="dino_wm/conf", config_name="train")
 def main(cfg: OmegaConf):
     trainer = Trainer(cfg)
     trainer.run()
