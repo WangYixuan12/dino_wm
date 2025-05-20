@@ -458,8 +458,6 @@ class Trainer:
         for i, data in enumerate(
             tqdm(self.dataloaders["train"], desc=f"Epoch {self.epoch} Train")
         ):
-            if i > 2:
-                break
             obs, act, _ = data
             plot = i == 0  # only plot from the first batch
             self.model.train()
