@@ -1,3 +1,5 @@
+import os
+
 import torch
 import decord
 import pickle
@@ -54,7 +56,7 @@ class PushTDataset(TrajDataset):
         else:
             self.shapes = ['T'] * len(self.states)
 
-        self.n_rollout = n_rollout
+        self.n_rollout = len(list((self.data_path / "obses").glob("*.mp4")))
         if self.n_rollout:
             n = self.n_rollout
         else:
