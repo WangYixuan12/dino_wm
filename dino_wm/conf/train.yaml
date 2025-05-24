@@ -3,7 +3,7 @@ defaults:
   - env: point_maze
   - encoder: dino 
   - action_encoder: proprio
-  # - proprio_encoder: proprio
+  - proprio_encoder: proprio
   - decoder: vqvae
   - predictor: vit
   # - override hydra/launcher: submitit_slurm
