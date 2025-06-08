@@ -1,5 +1,6 @@
 import os
 import time
+import sys
 import hydra
 import torch
 import wandb
@@ -20,8 +21,13 @@ from hydra.types import RunMode
 from hydra.core.hydra_config import HydraConfig
 from datetime import timedelta
 from concurrent.futures import ThreadPoolExecutor
+import dino_wm.models
+import dino_wm.datasets
 from dino_wm.metrics.image_metrics import eval_images
 from dino_wm.utils import slice_trajdict_with_t, cfg_to_dict, seed, sample_tensors
+
+sys.modules['models'] = dino_wm.models
+sys.modules['datasets'] = dino_wm.datasets
 
 warnings.filterwarnings("ignore")
 log = logging.getLogger(__name__)

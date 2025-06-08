@@ -95,15 +95,15 @@ class DINOWM:
             "epoch",
         ]
         self._keys_to_save += (
-            ["encoder", "encoder_optimizer"] if self.train_encoder else []
+            ["encoder"] if self.train_encoder else []
         )
         self._keys_to_save += (
-            ["predictor", "predictor_optimizer"]
+            ["predictor"]
             if self.train_predictor and self.cfg.has_predictor
             else []
         )
         self._keys_to_save += (
-            ["decoder", "decoder_optimizer"] if self.train_decoder else []
+            ["decoder"] if self.train_decoder else []
         )
         self._keys_to_save += ["action_encoder", "proprio_encoder"]
 
@@ -116,6 +116,8 @@ class DINOWM:
                 os.makedirs("checkpoints")
             ckpt = {}
             for k in self._keys_to_save:
+                if not isinstance(self.__dict__[k], int):
+                    self.__dict__[k].eval()
                 if self.__dict__[k] is None:
                     continue
                 if hasattr(self.__dict__[k], "module"):
@@ -129,6 +131,9 @@ class DINOWM:
             # torch.save(ckpt, f"checkpoints/model_{self.epoch}.pth")
             log.info("Saved model to {}".format(os.getcwd()))
             ckpt_path = os.path.join(os.getcwd(), f"checkpoints/model_latest.pth")
+            for k in self._keys_to_save:
+                if not isinstance(self.__dict__[k], int):
+                    self.__dict__[k].train()  # set back to train mode
         else:
             ckpt_path = None
         model_name = self.cfg["saved_folder"].split("outputs/")[-1]
@@ -159,11 +164,12 @@ class DINOWM:
                 param.requires_grad = False
 
         if "proprio_encoder" in self.cfg:
-            self.proprio_encoder = hydra.utils.instantiate(
-                self.cfg.proprio_encoder,
-                in_chans=self.datasets["train"].proprio_dim,
-                emb_dim=self.cfg.proprio_emb_dim,
-            )
+            if self.proprio_encoder is None:
+                self.proprio_encoder = hydra.utils.instantiate(
+                    self.cfg.proprio_encoder,
+                    in_chans=self.cfg.proprio_dim,
+                    emb_dim=self.cfg.proprio_emb_dim,
+                )
             proprio_emb_dim = self.proprio_encoder.emb_dim
             print(f"Proprio encoder type: {type(self.proprio_encoder)}")
             self.proprio_encoder = self.accelerator.prepare(self.proprio_encoder)
