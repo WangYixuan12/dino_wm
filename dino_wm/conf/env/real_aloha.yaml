@@ -1,0 +1,33 @@
+name: real_aloha
+args: []
+kwargs: {}
+
+dataset:
+  _target_: "dino_wm.datasets.real_aloha_dset.load_custom_slice_train_val"
+  dataset_dir: data/sim_aloha/transfer_cube_0301
+  pad_before: 1
+  seed: 42
+  val_ratio: 0.1
+  skip_idx: 50
+  val_horizon: 50
+  use_cache: true
+  delta_action: false
+  action_mode: bimanual_push
+  # action_mode: single_ee
+  shape_meta:
+    action:
+      shape:
+      - 4
+    obs:
+      camera_1_color:
+        shape:
+        - 3 # C
+        - 128 # H
+        - 128 # W
+        type: rgb
+
+
+
+
+decoder_path: null
+num_workers: 16
