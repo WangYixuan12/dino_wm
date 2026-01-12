@@ -6,3 +6,5 @@ data/
 .vscode/
 wandb/
 
+build/
+*.egg-info
