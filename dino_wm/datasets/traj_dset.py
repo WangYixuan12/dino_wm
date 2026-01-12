@@ -23,6 +23,10 @@ def _accumulate(iterable, fn=lambda x, y: x + y):
         yield total
 
 class TrajDataset(Dataset, abc.ABC):
+    def __init__(self) -> None:
+        super().__init__()
+        self.is_val = False
+    
     @abc.abstractmethod
     def get_seq_length(self, idx):
         """

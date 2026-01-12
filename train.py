@@ -749,7 +749,7 @@ class Trainer:
                     concat_img = np.clip(concat_img, 0.0, 1.0)
                     concat_img = (concat_img * 255.0).astype(np.uint8)
                     self.wandb_run.log(
-                        {f"{mode}_vis/rollout_{idx}": wandb.Video(concat_img, caption=f"rollout_{idx}")}
+                        {f"{mode}_vis/rollout_{idx}": wandb.Video(concat_img, caption=f"rollout_{idx}", format='mp4')}
                     )
         logs = {
             key: sum(values) / len(values) for key, values in logs.items() if values
@@ -854,7 +854,7 @@ class Trainer:
             concat_img = np.clip(concat_img, 0.0, 1.0)
             concat_img = (concat_img * 255.0).astype(np.uint8)
             self.wandb_run.log(
-                {f"{phase}_vis/sample_{batch}": wandb.Video(concat_img, caption=f"sample_{batch}")}
+                {f"{phase}_vis/sample_{batch}": wandb.Video(concat_img, caption=f"sample_{batch}", format='mp4')}
             )
 
     def plot_imgs(self, imgs, num_columns, img_name):

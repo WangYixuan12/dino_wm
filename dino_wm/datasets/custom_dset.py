@@ -51,14 +51,15 @@ class CustomDataset(TrajDataset):
         action_mode: str = "bimanual_push",
         shape_meta: Optional[Dict[str, Any]] = None,
     ):
+        super().__init__()
         # assign config
-        seq_horizon = (horizon + 1) * skip_frame
-        self.val_horizon = (val_horizon + 1) * skip_frame
+        seq_horizon = horizon * skip_frame
+        self.val_horizon = val_horizon * skip_frame
         self.skip_idx = skip_idx
         self.action_mode = action_mode
 
         train_dir = os.path.join(dataset_dir, "train")
-        replay_buffer = load_replay_buffer(train_dir, use_cache, shape_meta)
+        replay_buffer = load_replay_buffer(train_dir)
         self.replay_buffer = replay_buffer
 
         rgb_keys = list()
@@ -79,7 +80,7 @@ class CustomDataset(TrajDataset):
 
         self.sampler = SequenceSampler(
             replay_buffer=self.replay_buffer,
-            sequence_length=horizon,
+            sequence_length=seq_horizon,
             pad_before=pad_before,
             pad_after=pad_after,
             episode_mask=train_mask,
@@ -106,6 +107,13 @@ class CustomDataset(TrajDataset):
         episode_len = episode_end - episode_start
         return episode_len
 
+    def __len__(self) -> int:
+        if self.is_val:
+            # the number of episodes in the validation set
+            return self.replay_buffer.n_episodes // self.skip_idx
+        else:
+            return len(self.sampler)
+
     def get_validation_dataset(self) -> "CustomDataset":
         """Return a validation dataset."""
         val_set = copy.copy(self)
@@ -113,7 +121,7 @@ class CustomDataset(TrajDataset):
         val_dir = os.path.join(self.dataset_dir, "val")
         shape_meta = self.shape_meta
         use_cache = self.use_cache
-        val_set.replay_buffer = load_replay_buffer(val_dir, use_cache, shape_meta)
+        val_set.replay_buffer = load_replay_buffer(val_dir)
         val_mask = np.ones((val_set.replay_buffer.n_episodes,), dtype=bool)
         val_set.sampler = SequenceSampler(
             replay_buffer=val_set.replay_buffer,
@@ -174,7 +182,6 @@ def load_custom_slice_train_val(
     pad_before: int = 1,
     pad_after: int = 7,
     seed: int = 42,
-    val_ratio: float = 0.1,
     skip_idx: int = 20,
     use_cache: bool = True,
     delta_action: bool = False,
@@ -193,7 +200,6 @@ def load_custom_slice_train_val(
         pad_before=pad_before,
         pad_after=pad_after,
         seed=seed,
-        val_ratio=val_ratio,
         skip_idx=skip_idx,
         use_cache=use_cache,
         delta_action=delta_action,
@@ -215,7 +221,6 @@ def load_custom_slice_train_val(
         pad_before=pad_before,
         pad_after=pad_after,
         seed=seed,
-        val_ratio=val_ratio,
         skip_idx=skip_idx,
         use_cache=use_cache,
         delta_action=delta_action,

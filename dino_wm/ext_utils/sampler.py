@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List, Dict, Tuple
 
 import numba
 import numpy as np
@@ -92,10 +92,12 @@ class SequenceSampler:
         sequence_length: int,
         pad_before: int = 0,
         pad_after: int = 0,
-        keys=None,
-        key_first_k=dict(),  # noqa
+        keys: Optional[List[str]] = None,
+        key_first_k: Dict[str, int] = dict(),  # noqa
         episode_mask: Optional[np.ndarray] = None,
         skip_idx: int = 1,
+        skip_frame: int = 1,
+        keys_to_keep_intermediate: Optional[List[str]] = None,
     ):
         """Initialize sequence sampler.
 
@@ -130,18 +132,22 @@ class SequenceSampler:
         self.key_first_k = key_first_k
         self.episode_ends = episode_ends
         self.skip_idx = skip_idx
+        self.skip_frame = skip_frame
+        if keys_to_keep_intermediate is None:
+            keys_to_keep_intermediate = list()
+        self.keys_to_keep_intermediate = keys_to_keep_intermediate
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.indices) // self.skip_idx
 
-    def idx_to_epi_idx(self, idx):
+    def idx_to_epi_idx(self, idx: int) -> Tuple[int, int]:
         """Get episode index and offset from sequence index."""
         buffer_start_idx, buffer_end_idx, sample_start_idx, sample_end_idx = (
             self.indices[idx]
         )
         return self.buffer_idx_to_epi_idx(buffer_start_idx)
 
-    def buffer_idx_to_epi_idx(self, buffer_idx):
+    def buffer_idx_to_epi_idx(self, buffer_idx: int) -> Tuple[int, int]:
         """Get episode index and offset from buffer index."""
         epi_idx = np.searchsorted(self.episode_ends, buffer_idx, side="right")
         epi_offset = (
@@ -149,13 +155,17 @@ class SequenceSampler:
         )
         return epi_idx, epi_offset
 
-    def sample_sequence(self, idx):
+    def sample_sequence(self, idx: int) -> Dict[str, np.ndarray]:
         """Sample a sequence."""
         buffer_start_idx, buffer_end_idx, sample_start_idx, sample_end_idx = (
             self.indices[idx * self.skip_idx]
         )
         result = dict()
 
+        # epi_idx, epi_offset = self.buffer_idx_to_epi_idx(buffer_start_idx)
+        # episode_end = self.episode_ends[epi_idx]
+        is_early_stop = False
+        rel_stop_idx = -1
         for key in self.keys:
             input_arr = self.replay_buffer[key]
             # performance optimization, avoid small allocation if possible
@@ -176,20 +186,45 @@ class SequenceSampler:
                     buffer_start_idx : buffer_start_idx + k_data
                 ]
             data = sample
-            is_pad = np.zeros(self.sequence_length, dtype=bool)
+            # is_pad = np.zeros(self.sequence_length, dtype=bool)
             if (sample_start_idx > 0) or (sample_end_idx < self.sequence_length):
                 data = np.zeros(
                     shape=(self.sequence_length,) + data.shape[1:], dtype=data.dtype
                 )
                 if sample_start_idx > 0:
                     data[:sample_start_idx] = sample[0]
-                    is_pad[:sample_start_idx] = True
+                    # is_pad[:sample_start_idx] = True
                 if sample_end_idx < self.sequence_length:
                     data[sample_end_idx:] = sample[-1]
-                    is_pad[sample_end_idx:] = True
+                    # is_pad[sample_end_idx:] = True
                 data[sample_start_idx:sample_end_idx] = sample
-            result[key] = data
-            result[f"{key}_is_pad"] = is_pad
+            if key in self.keys_to_keep_intermediate:
+                inter_frames = self.sequence_length // self.skip_frame
+                data_shape = list(data.shape[1:])
+                data_shape[0] = data_shape[0] * self.skip_frame
+                result[key] = data.reshape(
+                    inter_frames, self.skip_frame, *data.shape[1:]
+                )
+                result[key] = result[key].reshape(-1, *data_shape)
+                # is_pad_shape = list(is_pad.shape[1:])
+                # is_pad_shape[0] = is_pad_shape[0] * self.skip_frame
+                # result[f"{key}_is_pad"] = \
+                #   is_pad.reshape(inter_frames, self.skip_frame, *is_pad.shape[1:])
+                # result[f"{key}_is_pad"] = \
+                #   result[f"{key}_is_pad"].reshape(-1, *is_pad_shape)
+            else:
+                result[key] = data[:: self.skip_frame]
+                # result[f"{key}_is_pad"] = is_pad[:: self.skip_frame]
+            # if self.goal_sample == "aggressive" and is_early_stop:
+            #     # sample[rel_stop_idx:] = np.repeat(
+            #     #     sample[rel_stop_idx][None], len(sample) - rel_stop_idx, axis=0
+            #     # )
+            #     final_obs = result[key][rel_stop_idx]
+            # else:
+            #     final_obs = input_arr[final_idx]
+            # result[f"{key}_final"] = final_obs
+            result["is_early_stop"] = is_early_stop
+            result["rel_stop_idx"] = rel_stop_idx
         return result
 
     def sample_pair_from_buffer_idx(
