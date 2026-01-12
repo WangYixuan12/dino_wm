@@ -28,5 +28,5 @@ python train.py \
     training.batch_size=32 \
     env=custom \
     env.dataset.dataset_dir='/scratch/bcyd/ywang41/diffusion-forcing/data/sim_aloha/pusht_0407/' \
-    frameskip=5 \
-    num_hist=3
+    frameskip=4 \
+    num_hist=9
