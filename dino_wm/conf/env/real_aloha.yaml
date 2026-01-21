@@ -7,7 +7,6 @@ dataset:
   dataset_dir: data/sim_aloha/transfer_cube_0301
   pad_before: 1
   seed: 42
-  val_ratio: 0.1
   skip_idx: 50
   val_horizon: 50
   use_cache: true
