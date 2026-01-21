@@ -141,7 +141,7 @@ class DINOWM:
         return ckpt_path, model_name, model_epoch
 
     def load_ckpt(self, filename="model_latest.pth"):
-        ckpt = torch.load(filename)
+        ckpt = torch.load(filename, weights_only=False)
         for k, v in ckpt.items():
             self.__dict__[k] = v
         not_in_ckpt = set(self._keys_to_save) - set(ckpt.keys())
@@ -153,6 +153,8 @@ class DINOWM:
         if model_ckpt.exists():
             self.load_ckpt(model_ckpt)
             log.info(f"Resuming from epoch {self.epoch}: {model_ckpt}")
+        else:
+            raise FileNotFoundError(f"No checkpoint found at {model_ckpt}")
 
         # initialize encoder
         if self.encoder is None:
